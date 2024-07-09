@@ -24,7 +24,7 @@ This Ansible playbook sets up a fresh Ubuntu 24.04 installation with essential t
 - [ ] You have `sudo` access on the system you want to configure.
 - [ ] `ansible-playbook` is installed on the system you're running the playbook from.
 - [ ] A fresh Ubuntu 24.04 installation.
-- [ ] A VM/computer with an NVIDIA GPU passed through to it.
+- [ ] A VM/computer with an NVIDIA GPU.
 
 ## How to use
 
