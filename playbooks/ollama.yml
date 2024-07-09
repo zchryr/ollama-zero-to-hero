@@ -1,0 +1,193 @@
+---
+- name: Pre-flight checks and setup
+  hosts: all
+  become: yes
+  tasks:
+    - name: Check available disk space
+      command: df --output=avail /
+      register: disk_space_output
+      changed_when: false
+
+    - name: Extract available disk space
+      set_fact:
+        disk_space: '{{ (disk_space_output.stdout_lines[1] | trim) | int }}'
+
+    - name: Fail if there is not enough disk space
+      fail:
+        msg: 'Not enough disk space. At least 30GB is required.'
+      when: disk_space | int < 30000000
+
+- name: Set up Ubuntu VM with Ollama, llama3, and NVIDIA tools
+  hosts: all
+  become: yes
+  tasks:
+    - name: Update and upgrade apt packages
+      apt:
+        update_cache: yes
+        upgrade: dist
+
+    - name: Install Ubuntu drivers tool
+      apt:
+        name: ubuntu-drivers-common
+        state: present
+
+    - name: Install the latest NVIDIA driver
+      shell: ubuntu-drivers autoinstall
+
+    - name: Install CUDA toolkit
+      apt:
+        name: nvidia-cuda-toolkit
+        state: present
+
+    - name: Install required packages for Docker
+      apt:
+        name: '{{ item }}'
+        state: present
+      loop:
+        - apt-transport-https
+        - ca-certificates
+        - curl
+        - gnupg
+        - lsb-release
+        - software-properties-common
+
+    - name: Uninstall conflicting Docker packages
+      shell: |
+        for pkg in docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc; do
+          sudo apt-get remove -y $pkg
+        done
+      ignore_errors: yes
+
+    - name: Set up Docker repository
+      shell: |
+        sudo apt-get update
+        sudo apt-get install -y ca-certificates curl
+        sudo install -m 0755 -d /etc/apt/keyrings
+        sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+        sudo chmod a+r /etc/apt/keyrings/docker.asc
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+        sudo apt-get update
+
+    - name: Install Docker packages
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+
+    - name: Enable Docker service
+      systemd:
+        name: docker
+        enabled: yes
+        state: started
+
+    - name: Reboot the VM
+      reboot:
+        post_reboot_delay: 10
+
+    - name: Verify NVIDIA driver installation
+      shell: nvidia-smi
+      register: nvidia_smi_output
+      failed_when: nvidia_smi_output.rc != 0
+      changed_when: false
+
+    - name: Install Ollama
+      shell: curl -fsSL https://ollama.com/install.sh | sh
+      args:
+        executable: /bin/bash
+
+    - name: Configure Ollama as a systemd service
+      copy:
+        dest: /etc/systemd/system/ollama.service
+        content: |
+          [Unit]
+          Description=Ollama Service
+          After=network.target
+
+          [Service]
+          ExecStart=/usr/local/bin/ollama serve
+
+          Restart=always
+          User=root
+          Group=root
+          Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+          Environment="OLLAMA_HOST=0.0.0.0:11434"
+          StandardOutput=journal
+          StandardError=journal
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Reload systemd and enable Ollama service
+      systemd:
+        daemon_reload: yes
+        name: ollama
+        enabled: yes
+        state: started
+
+    - name: Pull llama3 model
+      shell: ollama pull llama3
+
+    - name: Create /opt/open-webui directory
+      file:
+        path: /opt/open-webui
+        state: directory
+        mode: '0755'
+
+    - name: Pull open-webui docker image
+      shell: docker pull ghcr.io/open-webui/open-webui:main
+
+    - name: Write Open WebUI docker-compose.yml
+      ansible.builtin.copy:
+        dest: /opt/open-webui/docker-compose.yml
+        content: |
+          version: '3.8'
+          services:
+            open-webui:
+              image: ghcr.io/open-webui/open-webui:main
+              container_name: open-webui
+              volumes:
+                - open-webui:/app/backend/data
+              environment:
+                - 'OLLAMA_BASE_URL=http://localhost:11434'
+                - 'WEBUI_SECRET_KEY='
+              network_mode: host
+              restart: unless-stopped
+
+          volumes:
+            open-webui: {}
+
+    - name: Create systemd service for Docker Compose
+      copy:
+        dest: /etc/systemd/system/open-webui.service
+        content: |
+          [Unit]
+          Description=Open WebUI Docker Compose Service
+          After=network.target docker.service ollama.service
+          Requires=docker.service ollama.service
+
+          [Service]
+          WorkingDirectory=/opt/open-webui
+          ExecStart=/usr/bin/docker compose up --pull always
+          ExecStop=/usr/bin/docker compose down
+          Restart=always
+          User=root
+          Group=root
+          RestartSec=10
+          TimeoutStartSec=0
+          RemainAfterExit=yes
+          StandardOutput=journal
+          StandardError=journal
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Reload systemd and enable Open WebUI service
+      systemd:
+        daemon_reload: yes
+        name: open-webui
+        enabled: yes
+        state: started
