@@ -2,6 +2,8 @@
 
 This Ansible playbook sets up a fresh Ubuntu 24.04 installation with essential tools for running Ollama, llama3 using a NVIDIA GPU for acceleration.
 
+![600% speed](assets/ollama.gif)
+
 ## Playbook Features
 
 - Pre-flight checks
