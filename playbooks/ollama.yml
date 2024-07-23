@@ -129,7 +129,7 @@
         state: started
 
     - name: Pull llama3 model
-      shell: ollama pull llama3
+      shell: ollama pull llama3.1
 
     - name: Create /opt/open-webui directory
       file:
