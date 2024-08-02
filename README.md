@@ -1,4 +1,4 @@
-🚀 Ubuntu 24.04 Setup with Ollama, llama3, and NVIDIA Tools 🚀
+🚀 Ubuntu 24.04 Setup with Ollama, llama3.1, and NVIDIA Tools 🚀
 
 This Ansible playbook sets up a fresh Ubuntu 24.04 installation with essential tools for running Ollama, llama3 using a NVIDIA GPU for acceleration.
 
@@ -15,7 +15,7 @@ This Ansible playbook sets up a fresh Ubuntu 24.04 installation with essential t
   - CUDA toolkit
   - Docker
   - Ollama
-- Pulls llama3 model
+- Pulls llama3.1 model
 - Pulls Open WebUI docker image
 - Creates systemd services for Open WebUI and Ollama
 - Exposes Open WebUI on port `:8080`
@@ -66,7 +66,7 @@ Execute `ansible-playbook -i ./inventory/ollama.ini ./playbooks/ollama.yml` in t
 
 1. Go to the IP address of the VM/computer. For example `http://192.168.1.50:8080`
 2. Register your first user. This will become your admin user.
-3. Open a new chat and select llama3 as the model.
+3. Open a new chat and select llama3.1 as the model.
 4. Have fun!
 
 **Troubleshooting:**
